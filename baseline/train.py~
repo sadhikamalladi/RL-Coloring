@@ -1,0 +1,48 @@
+import torch
+import argparse
+from data import ColoringDataset, compute_num_nodes
+from trainer import Trainer
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+
+    # data params
+    parser.add_argument('--train_file', type=str, default='train',
+                        help='pickle file with training dataset')
+    parser.add_argument('--test_file', type=str, default='test',
+                        help='pickle file with testing dataset')
+
+    # model params
+    parser.add_argument('--embedding_size', type=int, default=128,
+                        help='dimensionality of graph embedding')
+    parser.add_argument('--hidden_size', type=int, default=128,
+                        help='dimensionality of hidden layers')
+    parser.add_argument('--n_glimpses', type=int, default=1,
+                        help='number of glimpses back (uses attn)')
+    parser.add_argument('--tanh_exploration', type=int, default=10,
+                        help='context for pointer attention')
+    parser.add_argument('--use_tanh', default=True, type=bool,
+                        help='use tanh for pointer attention context')
+    parser.add_argument('--attention_type', default='DOT', type=str,
+                        help='type of attention mechanism')
+
+    # training params
+    parser.add_argument('--beta', type=float, default=0.9,
+                        help='beta for optimization')
+
+    return parser.parse_args()
+
+def main():
+    hps = parse_args()
+
+    dsets = {'train': ColoringDataset(hps.train_file),
+             'test': ColoringDataset(hps.test_file)}
+
+    num_nodes = compute_num_nodes(dsets['train'])
+    model = CombinatorialRL(hps, num_nodes)
+    
+    trainer = Trainer(hps, dsets, model)
+    trainer.train()
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,52 @@
+from torch.utils.data import Dataset
+import pickle as pkl
+import torch
+import networkx as nx
+import numpy as np
+
+class ColoringDataset(Dataset):
+    
+    def __init__(self, file_path):
+        super(ColoringDataset, self).__init__()
+
+        dataset = pkl.load(open(file_path, 'rb'))
+
+        self.dataset = []
+        self.rnd_colorings = []
+        for i in range(len(dataset.keys())):
+            adj_mat = nx.adjacency_matrix(dataset[i].g).todense()
+            adj_mat = adj_mat.astype(np.float32)
+            adj_mat_torch = torch.from_numpy(adj_mat)
+            self.dataset.append(adj_mat_torch)
+            self.rnd_colorings.append(self.compute_coloring(dataset[i]))
+
+        self.original_graphs = dataset
+        self.rnd_colorings = torch.FloatTensor(self.rnd_colorings)
+        self.size = len(self.dataset)
+
+    def compute_coloring(self, g):
+        nodes = g.nodes()
+        coloring = np.zeros(nodes) -1
+        
+        # run random ordering greedy coloring of vertices
+        rnd_ordering = np.random.permutation(nodes)
+        for v in rnd_ordering:
+            available_colors = np.ones(nodes)
+            neighbors = g.neighbors(v)
+            for n in neighbors:
+                if coloring[n] != -1:
+                    available_colors[int(coloring[n])] = 0
+            min_color = np.where(available_colors == 1)[0][0]
+            coloring[v] = min_color
+
+        return np.max(coloring)+1
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, idx):
+        return self.dataset[idx], idx, self.rnd_colorings[idx]
+
+def compute_num_nodes(dset):
+    g = dset[0][1]
+    return dset.original_graphs[g].nodes()

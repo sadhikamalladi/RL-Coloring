@@ -1,0 +1,82 @@
+import torch
+
+class Trainer:
+
+    def __init__(self, hps, dsets, model):
+        self.hps = hps
+        self.dsets = dsets
+        self.model = model
+
+        self.train_loader = DataLoader(dsets['train'],
+                                       batch_size=hps.batch_size,
+                                       shuffle=True,
+                                       num_workers=1)
+        self.test_loader = DataLoader(dsets['test'],
+                                      batch_size=hps.batch_size,
+                                      shuffle=True,
+                                      num_workers=1)
+
+        self.actor_optim = optim.Adam(model.actor.parameters(), lr=hps.lr)
+
+    def train(self):
+        critic_exp_mvg_avg = torch.zeros(1)
+        if USE_CUDA: 
+            critic_exp_mvg_avg = critic_exp_mvg_avg.cuda()
+
+        train_loss = []
+        val_loss = []
+        for epoch in range(self.hps.epochs):
+            for batch_id, sample_batch in enumerate(self.train_loader):
+                self.model.train()
+
+                inputs, graphs, rnd_colors = sample_batch
+                inputs = Variable(inputs)
+                inputs = inputs.cuda()
+
+                R, probs, actions, actions_idxs, colors = self.model(inputs, graphs)
+
+                if batch_id == 0:
+                    critic_exp_mvg_avg = R.mean()
+                else:
+                    critic_exp_mvg_avg = (critic_exp_mvg_avg * beta) + ((1. - beta) * R.mean())
+
+
+                advantage = R - critic_exp_mvg_avg
+
+                logprobs = 0
+                for prob in probs: 
+                    logprob = torch.log(prob)
+                    logprobs += logprob
+                logprobs[logprobs < -1000] = 0.  
+
+                reinforce = advantage * logprobs
+                actor_loss = reinforce.mean()
+
+                self.actor_optim.zero_grad()
+                actor_loss.backward()
+                torch.nn.utils.clip_grad_norm(self.model.actor.parameters(),
+                                    float(self.hps.grad_norm), norm_type=2)
+
+                self.actor_optim.step()
+
+                critic_exp_mvg_avg = critic_exp_mvg_avg.detach()
+
+                approx_ratio = 1.0*colors / rnd_colors
+                train_loss.append(approx_ratio)
+
+                if batch_id % 10 == 0:
+                    self.plot(self.epochs)
+
+                if batch_id % 100 == 0:    
+
+                    self.model.eval()
+                    for val_batch in self.val_loader:
+                        inputs, graphs, rnd_colors = val_batch
+                        inputs = Variable(inputs)
+                        inputs = inputs.cuda()
+
+                        R, probs, actions, actions_idxs, colors = self.model(inputs)
+                        val_approx = 1.0*colors / rnd_colors
+                        val_loss.append(val_approx)
+                        
+            self.epochs += 1
