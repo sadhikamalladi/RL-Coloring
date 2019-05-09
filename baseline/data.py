@@ -21,6 +21,7 @@ class ColoringDataset(Dataset):
             self.rnd_colorings.append(self.compute_coloring(dataset[i]))
 
         self.original_graphs = dataset
+        self.avg_rnd = np.mean(self.rnd_colorings)
         self.rnd_colorings = torch.FloatTensor(self.rnd_colorings)
         self.size = len(self.dataset)
 

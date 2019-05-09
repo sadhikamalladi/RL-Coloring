@@ -1,7 +1,6 @@
 import numpy as np
 import torch
-import pulp
-
+import pickle as pkl
 
 """
 This file contains the definition of the environment
@@ -10,13 +9,30 @@ in which the agents are run.
 
 
 class Environment:
-    def __init__(self, graph,name):
+    def __init__(self, graph,args):
         self.graphs = graph
-        self.name= name
+        self.name= args.environment_name
+        self.test = pkl.load(open(args.test_file, 'rb'))
 
-    def reset(self, g):
+        self.train_solns = {}
+        self.test_solns = {}
+        for g in self.graphs.keys():
+            self.train_solns[g] = self.get_coloring_soln(self.graphs[g])
+        for g in self.test.keys():
+            self.test_solns[g] = self.get_coloring_soln(self.test[g])
+
+        self.train_avg = np.mean(list(self.train_solns.values()))
+        self.test_avg = np.mean(list(self.test_solns.values()))
+
+    def reset(self, g, test=False):
+        if test:
+            self.graph_init = self.test[g]
+            self.soln = self.test_solns[g]
+        else:
+            self.graph_init = self.graphs[g]
+            self.soln = self.train_solns[g]
+
         self.games = g
-        self.graph_init = self.graphs[self.games]
         self.nodes = self.graph_init.nodes()
         self.nbr_of_nodes = 0
         self.edge_add_old = 0
@@ -90,7 +106,7 @@ class Environment:
 
         elif self.name=="COLORING":
             added_color = self.color_graph(node)
-            reward = -1 if added_color else 1
+            reward = -1 if added_color else 10
 
             done = torch.sum((self.coloring == -1)).item() == 0
             return reward, done
@@ -211,3 +227,21 @@ class Environment:
                 coloring[v] = min_color
 
             return np.max(coloring)+1
+
+    def get_coloring_soln(self, g):
+        edges = list(g.edges())
+        nodes = g.nodes()
+        coloring = np.zeros(nodes) -1
+
+        # run random ordering greedy coloring of vertices
+        rnd_ordering = np.random.permutation(nodes)
+        for v in rnd_ordering:
+            available_colors = np.ones(nodes)
+            neighbors = g.neighbors(v)
+            for n in neighbors:
+                if coloring[n] != -1:
+                    available_colors[int(coloring[n])] = 0
+            min_color = np.where(available_colors == 1)[0][0]
+            coloring[v] = min_color
+
+        return np.max(coloring)+1

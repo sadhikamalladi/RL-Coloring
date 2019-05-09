@@ -5,6 +5,7 @@ import random
 import networkx as nx
 import numpy as np
 
+USE_GPU = True
 
 class S2V_QN_1(torch.nn.Module):
     def __init__(self,reg_hidden, embed_dim, len_pre_pooling, len_post_pooling, T):
@@ -48,7 +49,11 @@ class S2V_QN_1(torch.nn.Module):
         minibatch_size = xv.shape[0]
         nbr_node = xv.shape[1]
 
-
+        if USE_GPU:
+            xv = xv.cuda()
+            if adj is not None:
+                adj = adj.cuda()
+            
         for t in range(self.T):
             if t == 0:
                 #mu = self.mu_1(xv).clamp(0)
@@ -65,6 +70,8 @@ class S2V_QN_1(torch.nn.Module):
                 for i in range(self.len_pre_pooling):
                     mu = self.list_pre_pooling[i](mu).clamp(0)
 
+                if adj is None or mu is None:
+                    import pdb;pdb.set_trace()
                 mu_pool = torch.matmul(adj, mu)
 
                 # after pooling
@@ -465,15 +472,20 @@ class GCN_QN_1(torch.nn.Module):
 
     def forward(self, xv, adj):
 
+        if USE_GPU:
+            xv = xv.cuda()
+            if adj is not None:
+                adj = adj.cuda()
+
         minibatch_size = xv.shape[0]
         nbr_node = xv.shape[1]
 
-        diag = torch.ones(nbr_node)
+        diag = torch.ones(nbr_node).cuda()
         I = torch.diag(diag).expand(minibatch_size,nbr_node,nbr_node)
         adj_=adj+I
 
         D = torch.sum(adj,dim=1)
-        zero_selec = np.where(D.detach().numpy() == 0)
+        zero_selec = np.where(D.detach().cpu().numpy() == 0)
         D[zero_selec[0], zero_selec[1]] = 0.01
         d = []
         for vec in D:
@@ -485,7 +497,8 @@ class GCN_QN_1(torch.nn.Module):
         #D_=res.as_strided(res.size(), [res.stride(0), res.size(2) + 1]).copy_(D)
 
         #gv=torch.matmul(torch.matmul(d,adj_),d)
-        gv=torch.matmul(torch.inverse(d),adj_)
+        d_inv = torch.stack([torch.inverse(m) for m in d])
+        gv=torch.matmul(d_inv,adj_)
 
         for t in range(self.T):
             if t == 0:

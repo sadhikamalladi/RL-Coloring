@@ -6,59 +6,104 @@ This is not intented to be modified during the practical.
 import matplotlib.pyplot as plt
 import numpy as np
 import agent
+import pickle as pkl
+from tqdm import tqdm
+import os
 
 class Runner:
-    def __init__(self, environment, agent, verbose=False):
+    def __init__(self, environment, agent, ckpt, verbose=False):
         self.environment = environment
         self.agent = agent
         self.verbose = verbose
+        self.ckpt = ckpt
 
-    def step(self):
+        if not os.path.exists(f'{ckpt}/epoch_data'):
+            os.mkdir(f'{ckpt}/epoch_data')
+
+    def step(self, train=True):
         observation = self.environment.observe().clone()
         action = self.agent.act(observation).copy()
         (reward, done) = self.environment.act(action)
-        self.agent.reward(observation, action, reward,done)
+        self.agent.reward(observation, action, reward,done, train)
         return (observation, action, reward, done)
 
     def loop(self, games, max_iter):
-
-        cumul_reward = 0.0
-        list_cumul_reward_game=[]
-        list_optimal_set = []
-        list_aprox_set =[]
-        mean_reward = []
-        for epoch_ in range(25):
-            print(f'Epoch {epoch_}')
-            for g in range(games):
+        avg_ratios = []
+        avg_test = []
+        avg_colors_train = []
+        avg_colors_test = []
+        ep = 0
+        pkl.dump([self.environment.train_avg], open(f'{self.ckpt}/rnd_colors_train', 'wb'))
+        pkl.dump([self.environment.test_avg], open(f'{self.ckpt}/rnd_colors_test', 'wb'))
+        while True:
+            print(f'epoch {ep}')
+            self.agent.model.train()
+            num_colors_train = []
+            num_colors_test = []
+            approx_ratios = []
+            graphs = np.random.permutation(np.arange(games))
+            for i in tqdm(range(games)): # games
+                g = graphs[i]
                 self.environment.reset(g)
                 self.agent.reset(g)
-                cumul_reward_game = 0.0
 
                 for i in range(max_iter):
                     # if self.verbose:
                     # print("Simulation step {}:".format(i))
                     (obs, act, rew, done) = self.step()
-                    cumul_reward += rew
-                    cumul_reward_game += rew
-                           
                     if done:
-                        if self.verbose:
-                            print(f'Guessed colors: {self.environment.num_colors}, Random colors: {self.environment.get_optimal_sol()}')
+                        rnd_color = self.environment.soln
+                        aprat = 1.0 * self.environment.num_colors / rnd_color
+                        approx_ratios.append(aprat)
+                        num_colors_train.append(self.environment.num_colors)
                         break
-                np.savetxt('test_'+str(epoch_)+'.out', list_optimal_set, delimiter=',')
-                np.savetxt('test_approx_' + str(epoch_) + '.out', list_aprox_set, delimiter=',')
 
-                #np.savetxt('opt_set.out', list_optimal_set, delimiter=',')
+            avg_approx = np.mean(approx_ratios)
+            avg_ratios.append(avg_approx)
+            
+            # run test set
+            self.agent.model.eval()
+            test_ratios = []
+            test_graphs = np.random.choice(np.arange(100), size=20)
+            test_colors = []
+            for g in tqdm(range(20)):
+                gr = test_graphs[g]
+                self.environment.reset(gr, test=True)
+                self.agent.reset(gr, test=True)
+                
+                for i in range(max_iter):
+                    # if self.verbose:
+                    # print("Simulation step {}:".format(i))
+                    (obs, act, rew, done) = self.step(train=False)
+                    if done:
+                        rnd_color = self.environment.soln
+                        aprat = 1.0 * self.environment.num_colors / rnd_color
+                        test_ratios.append(aprat)
+                        num_colors_test.append(self.environment.num_colors)
+                        test_colors.append(rnd_color)
+                        break
 
-            if self.verbose:
-                print(" <=> Finished game number: {} <=>".format(g))
-                print("")
+            a_test = np.mean(test_ratios)
+            avg_test.append(a_test)
+            avg_colors_train.append(np.mean(num_colors_train))
+            avg_colors_test.append(np.mean(num_colors_test))
+            
+            pkl.dump(avg_ratios, open(f'{self.ckpt}/epoch_data/train_{ep}', 'wb'))
+            pkl.dump(test_ratios, open(f'{self.ckpt}/epoch_data/test_{ep}', 'wb'))
 
-        np.savetxt('test.out', list_cumul_reward_game, delimiter=',')
-        np.savetxt('opt_set.out', list_optimal_set, delimiter=',')
-        #plt.plot(list_cumul_reward_game)
-        #plt.show()
-        return cumul_reward
+            print(f'train: {np.mean(avg_ratios)}, test: {np.mean(test_ratios)}')
+            print(f'train: ({avg_colors_train[-1]}, {self.environment.train_avg}), test: ({avg_colors_test[-1]}, {np.mean(test_colors)})')
+
+            if ep % 5 == 0:
+                self.agent.save_model(ep)
+                pkl.dump(avg_ratios, open(f'{self.ckpt}/train_losses', 'wb'))
+                pkl.dump(avg_test, open(f'{self.ckpt}/test_losses', 'wb'))
+                pkl.dump(avg_colors_train, open(f'{self.ckpt}/train_colors', 'wb'))
+                pkl.dump(avg_colors_test, open(f'{self.ckpt}/test_colors', 'wb'))
+
+            ep += 1
+
+        return 1
 
 def iter_or_loopcall(o, count):
     if callable(o):

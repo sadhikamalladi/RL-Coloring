@@ -41,7 +41,10 @@ class Trainer:
 
         train_loss = []
         val_loss = []
+        train_col = []
+        test_col = []
         for epoch in range(self.hps.epochs):
+            avg_col_train = []
             for batch_id, sample_batch in enumerate(self.train_loader):
                 self.model.train()
 
@@ -54,6 +57,7 @@ class Trainer:
                     originals.append(self.dsets['train'].original_graphs[g.item()])
 
                 R, actions, probs, colors = self.model(inputs, originals)
+                avg_col_train.append(torch.mean(colors).item())
 
                 if batch_id == 0:
                     critic_exp_mvg_avg = R.mean()
@@ -84,7 +88,10 @@ class Trainer:
                 approx_ratio = colors / rnd_colors
                 train_loss.append(torch.mean(approx_ratio).item())
 
+            train_col.append(np.mean(avg_col_train))
+
             self.model.eval()
+            avg_col_test = []
             for val_batch in self.test_loader:
                 inputs, graphs, rnd_colors = val_batch
                 inputs = Variable(inputs)
@@ -94,11 +101,17 @@ class Trainer:
                 for g in graphs:
                     originals.append(self.dsets['train'].original_graphs[g.item()])
                 R, actions, probs, colors = self.model(inputs, originals)
+                avg_col_test.append(torch.mean(colors).item())
                 val_approx = colors / rnd_colors
                 val_loss.append(torch.mean(val_approx).item())
 
+            test_col.append(np.mean(avg_col_test))
+
             print(f'epoch {epoch}: train ({np.mean(train_loss)}), test ({np.mean(val_loss)})')
+            print(f"epoch {epoch}: train ({train_col[-1]}, {self.dsets['train'].avg_rnd}), test ({test_col[-1]}, {self.dsets['test'].avg_rnd})")
 
             pkl.dump(train_loss, open(f'{self.hps.ckpt}/train_losses.pkl', 'wb'))
             pkl.dump(val_loss, open(f'{self.hps.ckpt}/test_losses.pkl', 'wb'))
+            pkl.dump(train_col, open(f'{self.hps.ckpt}/train_colors.pkl', 'wb'))
+            pkl.dump(test_col, open(f'{self.hps.ckpt}/test_colors.pkl', 'wb'))
             torch.save(self.model.state_dict(), f'{self.hps.ckpt}/model_{epoch}.pt')

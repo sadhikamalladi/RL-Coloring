@@ -8,8 +8,8 @@ from utils.config import load_model_config
 
 import torch.nn.functional as F
 import torch
-
-
+import pickle as pkl
+import os
 
 # Set up logger
 logging.basicConfig(
@@ -28,11 +28,18 @@ USE_GPU = True
 class DQAgent:
 
 
-    def __init__(self,graph,model):
+    def __init__(self,graph,args):
 
+        self.ckpt = args.ckpt
+
+        if not os.path.exists(f'{self.ckpt}/model_ckpts'):
+            os.mkdir(f'{self.ckpt}/model_ckpts')
+
+        self.train = graph
+        self.test = pkl.load(open(args.test_file, 'rb'))
         self.graphs = graph
         self.embed_dim = 64
-        self.model_name = model
+        self.model_name = args.model
 
         self.k = 20
         self.alpha = 0.1
@@ -76,15 +83,17 @@ class DQAgent:
             self.model = models.W2V_QN(G=self.graphs[self.games], **args_init)
 
         self.criterion = torch.nn.MSELoss(reduction='sum')
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1.e-4)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1.e-3)
         #self.optimizer_target =  torch.optim.Adam(self.model_target.parameters(), lr=1.e-4)
         self.T = 5
 
         self.t = 1
 
+        if args.load_model is not None:
+            self.model.load_state_dict(torch.load(args.load_model))
+
         if USE_GPU:
             self.criterion = self.criterion.cuda()
-            self.optimizer = self.optimizer.cuda()
             self.model = self.model.cuda()
 
 
@@ -95,8 +104,13 @@ class DQAgent:
        
     """
 
-    def reset(self, g):
+    def reset(self, g, test=False):
 
+        if test:
+            self.graphs = self.test
+        else:
+            self.graphs = self.train
+            
 
         #self.memory=[]
         #self.memory_n=[]
@@ -113,7 +127,11 @@ class DQAgent:
 
         self.nodes = self.graphs[self.games].nodes()
 
-        self.adj = None
+        self.adj = self.graphs[self.games].adj()
+        self.adj = self.adj.todense()
+        self.adj = torch.from_numpy(np.expand_dims(self.adj.astype(int), axis=0))
+        self.adj = self.adj.type(torch.FloatTensor)
+        
         self.last_action = 0
         self.last_observation = torch.zeros(1, self.nodes, 1, dtype=torch.float)
         self.last_reward = -0.01
@@ -128,27 +146,28 @@ class DQAgent:
             observation = observation.cuda()
         
         if self.epsilon_ > np.random.rand():
-            return np.random.choice(np.where(observation.numpy()[0,:,0] == 0)[0])
+            return np.random.choice(np.where(observation.cpu().numpy()[0,:,0] == 0)[0])
         else:
             q_a = self.model(observation, self.adj)
-            q_a=q_a.detach().numpy()
-            return np.where((q_a[0, :, 0] == np.max(q_a[0, :, 0][observation.numpy()[0, :, 0] == 0])))[0][0]
+            q_a=q_a.detach().cpu().numpy()
+            return np.where((q_a[0, :, 0] == np.max(q_a[0, :, 0][observation.cpu().numpy()[0, :, 0] == 0])))[0][0]
 
-    def reward(self, observation, action, reward,done):
+    def reward(self, observation, action, reward,done, train=True):
 
         if len(self.memory_n) > self.minibatch_length + self.n_step: #or self.games > 2:
 
             (last_observation_tens, action_tens, reward_tens, observation_tens, done_tens,adj_tens) = self.get_sample()
-            target = reward_tens + self.gamma *(1-done_tens)*torch.max(self.model(observation_tens, adj_tens) + observation_tens * (-1e5), dim=1)[0]
+            target = reward_tens + self.gamma *(1-done_tens)*torch.max(self.model(observation_tens, adj_tens).cpu() + observation_tens * (-1e5), dim=1)[0]
             target_f = self.model(last_observation_tens, adj_tens)
             target_p = target_f.clone()
-            target_f[range(self.minibatch_length),action_tens,:] = target
+            target_f[range(self.minibatch_length),action_tens,:] = target.cuda()
             loss=self.criterion(target_p, target_f)
 
 
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+            if train:
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
             #print(self.model.mu_2.weight[0])
             #print(self.t, loss)
 
@@ -225,9 +244,8 @@ class DQAgent:
                 else:
                     self.memory_n.append((step_init[0], step_init[1], cum_reward,self.memory[-1][-3], False, self.memory[-1][-1]))
 
-    def save_model(self):
-        cwd = os.getcwd()
-        torch.save(self.model.state_dict(), cwd+'/model.pt')
+    def save_model(self, it):
+        torch.save(self.model.state_dict(), f'{self.ckpt}/model_ckpts/{it}.pt')
 
 
 Agent = DQAgent

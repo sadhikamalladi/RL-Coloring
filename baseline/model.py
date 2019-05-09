@@ -195,7 +195,7 @@ class CombinatorialRL(nn.Module):
                 if min_color > max_color:
                     reward += 1
                 else:
-                    reward -= 1
+                    reward -= 10
                 coloring[v] = min_color
             coloring_reward[b] = reward
             num_colors[b] = np.max(coloring) + 1

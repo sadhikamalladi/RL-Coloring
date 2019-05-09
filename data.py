@@ -12,13 +12,13 @@ def parse_args():
                         help='dir to store generated graph data in')
     parser.add_argument('--graph_type', default='erdos_renyi', type=str,
                         help='type of graph to generate')
-    parser.add_argument('--nbr_graphs', default=500, type=int,
+    parser.add_argument('--nbr_graphs', default=100, type=int,
                         help='number of graphs to generate')
-    parser.add_argument('--nbr_nodes', default=1000, type=int,
+    parser.add_argument('--nbr_nodes', default=100, type=int,
                         help='number of nodes in graph')
-    parser.add_argument('--edge_prob', default=0.25, type=float,
+    parser.add_argument('--edge_prob', default=0.9, type=float,
                         help='probability of forming edge in graph')
-    parser.add_argument('--edge_num', default=62000, type=int,
+    parser.add_argument('--edge_num', default=10, type=int,
                         help='number of edges in graph (used for barabasi and powerlaw')
 
     return parser.parse_args()

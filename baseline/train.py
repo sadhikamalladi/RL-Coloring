@@ -6,6 +6,7 @@ from model import CombinatorialRL
 import os
 import glob
 import re
+import pickle as pkl
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -58,6 +59,9 @@ def main():
 
     dsets = {'train': ColoringDataset(hps.train_file),
              'test': ColoringDataset(hps.test_file)}
+
+    pkl.dump(dsets['train'].avg_rnd, open(f'{hps.ckpt}/avg_rnd_train.pkl', 'wb'))
+    pkl.dump(dsets['test'].avg_rnd, open(f'{hps.ckpt}/avg_rnd_test.pkl', 'wb'))
 
     num_nodes = compute_num_nodes(dsets['train'])
     model = CombinatorialRL(hps, num_nodes)
