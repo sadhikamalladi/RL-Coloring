@@ -7,6 +7,8 @@ import logging
 import numpy as np
 import networkx as nx
 import sys
+import glob
+import re
 import pickle as pkl
 import datetime, os
 
@@ -39,8 +41,13 @@ parser.add_argument('--test_file', default='train', type=str,
                     help='loads data from pickle file for testing if not None')
 parser.add_argument('--ckpt', default=None, type=str,
                     help='directory to save results in, makes a new one using current time if None')
-parser.add_argument('--load_model', default=None, type=str,
+parser.add_argument('--load_model', default=False, action='store_true',
                     help='when not none loads model from checkpoint')
+
+parser.add_argument('--test_only', default=False, action='store_true',
+                    help='tests a model without training, load_model must be specified')
+parser.add_argument('--test_output', default='testing_results.pkl', type=str,
+                    help='output file for test results, used in test_only option')
 
 def main():
     args = parser.parse_args()
@@ -53,16 +60,40 @@ def main():
     else:
         graph_dic = pkl.load(open(args.train_file, 'rb'))
 
+    args.ngames = len(list(graph_dic.keys()))
+
+
+    current_ep = 0
+    if args.load_model:
+        # find epoch we were last at
+        ckpts = glob.glob(f'{args.ckpt}/model_ckpts/*.pt')
+        max_c = 0
+        for c in ckpts:
+            num = int(re.search(f'{args.ckpt}/model_ckpts/(.+?).pt', c).group(1))
+            if num > max_c:
+                max_c = num
+
+        args.load_model = f'{args.ckpt}/model_ckpts/{max_c}.pt'
+        current_ep = max_c
 
     if args.ckpt is None:
         now = datetime.datetime.today()
         args.ckpt = now.strftime('%m-%d-%y_%H.%M.%S')
+
+    if args.test_only:
+        print('testing only!')
+        env_class = environment.Environment(graph_dic,args)
+        
+        agent_class = agent.Agent(graph_dic, args)
+        my_runner = runner.Runner(env_class, agent_class, args.ckpt, args, args.verbose)
+        my_runner.test(args.niter)
+        return
         
     if not os.path.exists(args.ckpt):
         os.mkdir(args.ckpt)
 
     pkl.dump(args, open(f'{args.ckpt}/hps.pkl', 'wb'))
-            
+
 
     logging.info('Loading agent...')
     agent_class = agent.Agent(graph_dic, args)
@@ -72,14 +103,14 @@ def main():
 
     if args.batch is not None:
         print("Running a batched simulation with {} agents in parallel...".format(args.batch))
-        my_runner = runner.BatchRunner(env_class, agent_class, args.batch, args.ckpt, args.verbose)
+        my_runner = runner.BatchRunner(env_class, agent_class, args.batch, args.ckpt,args, args.verbose)
         final_reward = my_runner.loop(args.ngames, args.niter)
         print("Obtained a final average reward of {}".format(final_reward))
         agent_class.save_model()
     else:
         print("Running a single instance simulation...")
-        my_runner = runner.Runner(env_class, agent_class, args.ckpt, args.verbose)
-        final_reward = my_runner.loop(args.ngames, args.niter)
+        my_runner = runner.Runner(env_class, agent_class, args.ckpt, args, args.verbose)
+        final_reward = my_runner.loop(args.ngames, args.niter, ep=current_ep)
         print("Obtained a final reward of {}".format(final_reward))
         agent_class.save_model()
 

@@ -239,6 +239,10 @@ class Environment:
             available_colors = np.ones(nodes)
             neighbors = g.neighbors(v)
             for n in neighbors:
+                try:
+                    x = coloring[n]
+                except:
+                    import pdb;pdb.set_trace()
                 if coloring[n] != -1:
                     available_colors[int(coloring[n])] = 0
             min_color = np.where(available_colors == 1)[0][0]

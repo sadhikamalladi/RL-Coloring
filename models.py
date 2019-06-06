@@ -17,7 +17,7 @@ class S2V_QN_1(torch.nn.Module):
         self.len_pre_pooling = len_pre_pooling
         self.len_post_pooling = len_post_pooling
         #self.mu_1 = torch.nn.Linear(1, embed_dim)
-        #torch.nn.init.normal_(self.mu_1.weight,mean=0,std=0.01)
+        #torch.nn.init.normal_(self.mu_1.weight,mean=0,std=0.01) 
         self.mu_1 = torch.nn.Parameter(torch.Tensor(1, embed_dim))
         torch.nn.init.normal_(self.mu_1, mean=0, std=0.01)
         self.mu_2 = torch.nn.Linear(embed_dim, embed_dim,True)

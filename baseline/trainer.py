@@ -23,6 +23,8 @@ class Trainer:
         if USE_CUDA:
             self.model = self.model.cuda()
 
+        if hps.test_only:
+            hps.batch_size = 1
         self.train_loader = DataLoader(dsets['train'],
                                        batch_size=hps.batch_size,
                                        shuffle=True,
@@ -33,6 +35,28 @@ class Trainer:
                                       num_workers=1)
 
         self.actor_optim = torch.optim.Adam(model.actor.parameters(), lr=hps.lr)
+
+    def test(self):
+        self.model.eval()
+        test_colors = []
+        rnd_colors = []
+        for val_batch in self.test_loader:
+            import pdb;pdb.set_trace()
+            inputs, graphs, rnd_color = val_batch
+            inputs = Variable(inputs)
+            inputs = inputs.cuda()
+
+            originals = []
+            for g in graphs:
+                originals.append(self.dsets['test'].original_graphs[g.item()])
+            R, actions, probs, colors = self.model(inputs, originals)
+
+            test_colors.extend(colors)
+            rnd_colors.extend(rnd_color)
+
+        import pdb;pdb.set_trace()
+
+        test_col.append(np.mean(avg_col_test))
 
     def train(self):
         critic_exp_mvg_avg = torch.zeros(1)
@@ -99,7 +123,7 @@ class Trainer:
                 
                 originals = []
                 for g in graphs:
-                    originals.append(self.dsets['train'].original_graphs[g.item()])
+                    originals.append(self.dsets['test'].original_graphs[g.item()])
                 R, actions, probs, colors = self.model(inputs, originals)
                 avg_col_test.append(torch.mean(colors).item())
                 val_approx = colors / rnd_colors

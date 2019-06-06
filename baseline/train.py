@@ -38,7 +38,7 @@ def parse_args():
                         help='learning rate')
     parser.add_argument('--batch_size', type=int, default=128,
                         help='batch size')
-    parser.add_argument('--epochs', type=int, default=5,
+    parser.add_argument('--epochs', type=int, default=100,
                         help='number of epochs to train')
     parser.add_argument('--grad_norm', type=float, default=2.0,
                         help='norm to clip grads at')
@@ -48,6 +48,10 @@ def parse_args():
                         help='directory to save results and model ckpts in')
     parser.add_argument('--resume', type=bool, default=False,
                         help='when true, resumes model training from last epoch in ckpt folder')
+    parser.add_argument('--test_only', default=False, action='store_true',
+                        help='when true, tests the model on the dataset without training')
+    parser.add_argument('--test_output', default='test_output.pkl', type=str,
+                        help='file to write reuslts to (pickle format)')
 
     return parser.parse_args()
 
@@ -76,7 +80,11 @@ def main():
         model.load_state_dict(torch.load(f'{hps.ckpt}/model_{max_c}.pt'))
     
     trainer = Trainer(hps, dsets, model)
-    trainer.train()
+
+    if hps.test_only:
+        trainer.test()
+    else:
+        trainer.train()
 
 if __name__ == '__main__':
     main()

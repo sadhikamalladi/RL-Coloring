@@ -3,7 +3,6 @@ This is the machinnery that runs your agent in an environment.
 
 This is not intented to be modified during the practical.
 """
-import matplotlib.pyplot as plt
 import numpy as np
 import agent
 import pickle as pkl
@@ -11,13 +10,15 @@ from tqdm import tqdm
 import os
 
 class Runner:
-    def __init__(self, environment, agent, ckpt, verbose=False):
+    def __init__(self, environment, agent, ckpt, hps, verbose=False):
         self.environment = environment
         self.agent = agent
         self.verbose = verbose
         self.ckpt = ckpt
 
-        if not os.path.exists(f'{ckpt}/epoch_data'):
+        self.hps = hps
+        
+        if not hps.test_only and not os.path.exists(f'{ckpt}/epoch_data'):
             os.mkdir(f'{ckpt}/epoch_data')
 
     def step(self, train=True):
@@ -27,15 +28,42 @@ class Runner:
         self.agent.reward(observation, action, reward,done, train)
         return (observation, action, reward, done)
 
-    def loop(self, games, max_iter):
+    def test(self, max_iter):
+        self.agent.model.eval()
+        num_graphs = len(list(self.environment.test.keys()))
+        test_graphs = np.random.permutation(list(self.environment.test.keys()))
+        test_colors = []
+        print(f'testing {num_graphs} graphs')
+        for g in tqdm(range(num_graphs)):
+            gr = test_graphs[g]
+            self.environment.reset(gr, test=True)
+            self.agent.reset(gr, test=True)
+
+            for i in range(max_iter):
+                # if self.verbose:
+                # print("Simulation step {}:".format(i))
+                (obs, act, rew, done) = self.step(train=False)
+                if done:
+                    rnd_color = self.environment.soln
+                    alg_color = self.environment.num_colors
+                    test_colors.append((rnd_color, alg_color))
+                    break
+
+        pkl.dump(test_colors, open(f'{self.hps.test_output}', 'wb'))
+        aprats = [x[1]/x[0] for x in test_colors]
+        print(f'mean approximation ratio: {np.mean(aprats)}')
+        color_diff = [x[1] - x[0] for x in test_colors]
+        print(f'average number of colors (neg means fewer used by RL alg): {np.mean(color_diff)}')
+        
+
+    def loop(self, games, max_iter, ep=0):
         avg_ratios = []
         avg_test = []
         avg_colors_train = []
         avg_colors_test = []
-        ep = 0
         pkl.dump([self.environment.train_avg], open(f'{self.ckpt}/rnd_colors_train', 'wb'))
         pkl.dump([self.environment.test_avg], open(f'{self.ckpt}/rnd_colors_test', 'wb'))
-        while True:
+        for _ in range(ep, 100, 1):
             print(f'epoch {ep}')
             self.agent.model.train()
             num_colors_train = []

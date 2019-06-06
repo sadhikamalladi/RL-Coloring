@@ -32,7 +32,7 @@ class DQAgent:
 
         self.ckpt = args.ckpt
 
-        if not os.path.exists(f'{self.ckpt}/model_ckpts'):
+        if not args.test_only and not os.path.exists(f'{self.ckpt}/model_ckpts'):
             os.mkdir(f'{self.ckpt}/model_ckpts')
 
         self.train = graph
@@ -89,7 +89,7 @@ class DQAgent:
 
         self.t = 1
 
-        if args.load_model is not None:
+        if args.load_model != False:
             self.model.load_state_dict(torch.load(args.load_model))
 
         if USE_GPU:
@@ -138,6 +138,23 @@ class DQAgent:
         self.last_done=0
         self.iter=1
 
+        if test:
+            
+            self.k = 20
+            self.alpha = 0.1
+            self.gamma = 0.99
+            self.lambd = 0.
+            self.n_step=3
+
+            self.epsilon_=1.0
+            self.epsilon_min=0.02
+            self.discount_factor =0.999990
+            self.eps_end=0.02
+            self.eps_start=1
+            self.eps_step=20000
+            self.t=1
+            self.memory = []
+            self.memory_n=[]
 
 
 
