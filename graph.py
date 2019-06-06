@@ -6,6 +6,9 @@ import collections
 # seed = np.random.seed(120)
 
 class Graph:
+    def __init__(self, graph):
+        self.g = graph
+    
     def __init__(self, graph_type, cur_n, p, m=None, seed=None):
 
         if graph_type == 'erdos_renyi':
